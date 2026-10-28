@@ -1,4 +1,4 @@
-// TO ETHAN: paste this method into Warehouse.java (Feature 2, Receive Shipment).
+// Person 2 -> Person 3: paste this method into Warehouse.java (Feature 2, Receive Shipment).
 // Requires Product.java, WaitlistItem.java and ShipmentResult.java from Person 2.
 // No new imports are needed (Iterator is already imported; nothing else is used).
 // Returns null on failure (nonpositive quantity or unknown product ID).
