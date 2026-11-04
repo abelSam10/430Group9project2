@@ -1,25 +1,18 @@
+import java.awt.*;
 import java.util.*;
+import javax.swing.*;
 
 /**
- * The client menu state of the warehouse FSM. It corresponds to Userstate in
- * the LibTextFSM sample. Every operation works only on the client returned by
- * context.getClientID(); this class never asks for a client ID. When the user
- * logs out it calls context.logout() and returns, leaving the choice of the
- * next state to WarehouseContext.
+ * The GUI version of the client menu state of the warehouse FSM. It follows the
+ * run() structure of Loginstate and the listener pattern of ClerkButton in
+ * samplecode/Library: run() builds the screen and returns, and each button is
+ * its own class that calls one method here. Every operation works only on the
+ * client returned by context.getClientID(), and the choice of the next state
+ * belongs to WarehouseContext.
  */
 public class ClientMenuState extends WarehouseState {
   private static ClientMenuState state;
   private Warehouse warehouse;
-
-  // Local menu numbers, NOT Context events
-  private static final int LOGOUT = 0;
-  private static final int SHOW_DETAILS = 1;
-  private static final int SHOW_PRODUCTS = 2;
-  private static final int SHOW_TRANSACTIONS = 3;
-  private static final int ADD_TO_WISHLIST = 4;
-  private static final int DISPLAY_WISHLIST = 5;
-  private static final int PLACE_ORDER = 6;
-  private static final int HELP = 7;
 
   private ClientMenuState() {
     super();
@@ -36,29 +29,10 @@ public class ClientMenuState extends WarehouseState {
     return state;
   }
 
-  // Reads a menu command; returns -1 at end of input
-  private int getCommand() {
+  // Reads a positive integer (a quantity); returns -1 on Cancel
+  private int getQuantity(String prompt) {
     do {
-      String token = context.getToken("Enter command: " + HELP + " for help");
-      if (token == null) {
-        return -1;
-      }
-      try {
-        int value = Integer.parseInt(token);
-        if (value >= LOGOUT && value <= HELP) {
-          return value;
-        }
-        System.out.println("Enter a number between " + LOGOUT + " and " + HELP);
-      } catch (NumberFormatException nfe) {
-        System.out.println("Enter a number");
-      }
-    } while (true);
-  }
-
-  // Reads a positive integer (a quantity); returns -1 at end of input
-  private int getNumber(String prompt) {
-    do {
-      String token = context.getToken(prompt);
+      String token = context.getInput(prompt);
       if (token == null) {
         return -1;
       }
@@ -67,35 +41,11 @@ public class ClientMenuState extends WarehouseState {
         if (value > 0) {
           return value;
         }
-        System.out.println("Please input a number greater than 0");
       } catch (NumberFormatException nfe) {
-        System.out.println("Please input a number");
+        // Ask again below
       }
+      context.showMessage("Enter a whole number greater than 0");
     } while (true);
-  }
-
-  // True only for an answer starting with Y or y; end of input counts as no
-  private boolean yesOrNo(String prompt) {
-    String more = context.getToken(prompt + " (Y|y)[es] or anything else for no");
-    if (more == null) {
-      return false;
-    }
-    return more.charAt(0) == 'y' || more.charAt(0) == 'Y';
-  }
-
-  /**
-   * Prints the client menu commands.
-   */
-  public void help() {
-    System.out.println("Enter a number between " + LOGOUT + " and " + HELP + " as explained below:");
-    System.out.println(LOGOUT + " to logout");
-    System.out.println(SHOW_DETAILS + " to show client details");
-    System.out.println(SHOW_PRODUCTS + " to show products");
-    System.out.println(SHOW_TRANSACTIONS + " to show transactions");
-    System.out.println(ADD_TO_WISHLIST + " to add items to the wishlist");
-    System.out.println(DISPLAY_WISHLIST + " to display the wishlist");
-    System.out.println(PLACE_ORDER + " to place an order");
-    System.out.println(HELP + " for help");
   }
 
   /**
@@ -105,15 +55,17 @@ public class ClientMenuState extends WarehouseState {
     String clientID = context.getClientID();
     Client client = warehouse.getClient(clientID);
     if (client == null) {
-      System.out.println("No such client");
+      context.showMessage("No such client");
       return;
     }
-    System.out.println("Client ID: " + client.getId());
-    System.out.println("Name:      " + client.getName());
-    System.out.println("Address:   " + client.getAddress());
-    System.out.println("Phone:     " + client.getPhone());
-    System.out.println(String.format("Balance:   $%.2f", client.getBalance())
-        + " (positive = amount owed, negative = credit)");
+    StringBuilder text = new StringBuilder();
+    text.append("Client ID: ").append(client.getId()).append("\n");
+    text.append("Name: ").append(client.getName()).append("\n");
+    text.append("Address: ").append(client.getAddress()).append("\n");
+    text.append("Phone: ").append(client.getPhone()).append("\n");
+    text.append(String.format("Balance: $%.2f (positive = amount owed, negative = credit)",
+        client.getBalance()));
+    context.showOutput("Client details: " + clientID, text.toString());
   }
 
   /**
@@ -122,14 +74,16 @@ public class ClientMenuState extends WarehouseState {
   public void showProducts() {
     Iterator<Product> allProducts = warehouse.getProducts();
     if (!allProducts.hasNext()) {
-      System.out.println("No products");
+      context.showOutput("Products", "No products");
       return;
     }
+    StringBuilder text = new StringBuilder();
     while (allProducts.hasNext()) {
       Product product = allProducts.next();
-      System.out.println(String.format("%s  %s  $%.2f",
-          product.getId(), product.getName(), product.getSalePrice()));
+      text.append(String.format("%-4s %-15s $%.2f",
+          product.getId(), product.getName(), product.getSalePrice())).append("\n");
     }
+    context.showOutput("Products", text.toString());
   }
 
   /**
@@ -139,23 +93,23 @@ public class ClientMenuState extends WarehouseState {
     String clientID = context.getClientID();
     Iterator<Order> orders = warehouse.getOrders(clientID);
     if (orders == null) {
-      System.out.println("No such client");
+      context.showMessage("No such client");
       return;
     }
+    StringBuilder text = new StringBuilder();
     if (!orders.hasNext()) {
-      System.out.println("No transactions");
-    } else {
-      System.out.println("Transactions for " + clientID + ":");
-      int number = 1;
-      while (orders.hasNext()) {
-        Order order = orders.next();
-        System.out.println("Order " + number++ + ":");
-        printOrderItems(order);
-        System.out.println(String.format("  Order total: $%.2f", order.getTotal()));
-      }
+      text.append("No transactions\n");
     }
-    System.out.println(String.format("Current balance: $%.2f",
+    int number = 1;
+    while (orders.hasNext()) {
+      Order order = orders.next();
+      text.append("Order ").append(number++).append(":\n");
+      appendOrderItems(text, order);
+      text.append(String.format("  Order total: $%.2f", order.getTotal())).append("\n");
+    }
+    text.append(String.format("Current balance: $%.2f",
         warehouse.getClient(clientID).getBalance()));
+    context.showOutput("Transactions: " + clientID, text.toString());
   }
 
   /**
@@ -164,20 +118,20 @@ public class ClientMenuState extends WarehouseState {
   public void addToWishlist() {
     String clientID = context.getClientID();
     do {
-      String productID = context.getToken("Enter product ID");
+      String productID = context.getInput("Enter product ID");
       if (productID == null) {
         return;
       }
-      int quantity = getNumber("Enter quantity");
+      int quantity = getQuantity("Enter quantity");
       if (quantity == -1) {
         return;
       }
       if (warehouse.addToWishlist(clientID, productID, quantity)) {
-        System.out.println(quantity + " of " + productID + " added to wishlist");
+        context.showMessage(quantity + " of " + productID + " added to wishlist");
       } else {
-        System.out.println(productID + " could not be added (unknown product)");
+        context.showMessage(productID + " could not be added (unknown product)");
       }
-    } while (yesOrNo("Add more items?"));
+    } while (context.confirm("Add more items?"));
   }
 
   /**
@@ -187,19 +141,21 @@ public class ClientMenuState extends WarehouseState {
     String clientID = context.getClientID();
     Iterator<WishlistItem> wishlist = warehouse.getWishlist(clientID);
     if (wishlist == null) {
-      System.out.println("No such client");
+      context.showMessage("No such client");
       return;
     }
-    System.out.println("Wishlist for " + clientID);
     if (!wishlist.hasNext()) {
-      System.out.println("Wishlist is empty");
+      context.showOutput("Wishlist: " + clientID, "Wishlist is empty");
       return;
     }
+    StringBuilder text = new StringBuilder();
     while (wishlist.hasNext()) {
       WishlistItem item = wishlist.next();
       Product product = item.getProduct();
-      System.out.println(product.getId() + "  " + product.getName() + "  qty " + item.getQuantity());
+      text.append(product.getId()).append("  ").append(product.getName())
+          .append("  qty ").append(item.getQuantity()).append("\n");
     }
+    context.showOutput("Wishlist: " + clientID, text.toString());
   }
 
   /**
@@ -207,47 +163,55 @@ public class ClientMenuState extends WarehouseState {
    */
   public void placeOrder() {
     String clientID = context.getClientID();
-    displayWishlist();
-    if (!yesOrNo("Place order for all items?")) {
+    Iterator<WishlistItem> wishlist = warehouse.getWishlist(clientID);
+    if (wishlist == null) {
+      context.showMessage("No such client");
       return;
     }
     // Snapshot of requested quantities, used only to report what was waitlisted
     Map<String, Integer> requested = new LinkedHashMap<String, Integer>();
-    Iterator<WishlistItem> wishlist = warehouse.getWishlist(clientID);
-    if (wishlist != null) {
-      while (wishlist.hasNext()) {
-        WishlistItem item = wishlist.next();
-        requested.put(item.getProduct().getId(), item.getQuantity());
-      }
+    while (wishlist.hasNext()) {
+      WishlistItem item = wishlist.next();
+      requested.put(item.getProduct().getId(), item.getQuantity());
+    }
+    if (requested.isEmpty()) {
+      context.showMessage("Order could not be processed (wishlist is empty)");
+      return;
+    }
+    displayWishlist();
+    if (!context.confirm("Place order for all items?")) {
+      return;
     }
     Order order = warehouse.processOrder(clientID);
     if (order == null) {
-      System.out.println("Order could not be processed (wishlist is empty)");
+      context.showMessage("Order could not be processed (wishlist is empty)");
       return;
     }
-    System.out.println("Order summary:");
-    Map<String, Integer> filled = printOrderItems(order);
-    System.out.println(String.format("Order total: $%.2f", order.getTotal()));
+    StringBuilder text = new StringBuilder("Order summary:\n");
+    Map<String, Integer> filled = appendOrderItems(text, order);
+    text.append(String.format("Order total: $%.2f", order.getTotal())).append("\n");
     for (Map.Entry<String, Integer> entry : requested.entrySet()) {
       Integer got = filled.get(entry.getKey());
       int waitlisted = entry.getValue() - (got == null ? 0 : got);
       if (waitlisted > 0) {
-        System.out.println(waitlisted + " unit(s) of " + entry.getKey() + " waitlisted (insufficient stock)");
+        text.append(waitlisted).append(" unit(s) of ").append(entry.getKey())
+            .append(" waitlisted (insufficient stock)\n");
       }
     }
-    System.out.println(String.format("Updated balance: $%.2f",
+    text.append(String.format("Updated balance: $%.2f",
         warehouse.getClient(clientID).getBalance()));
+    context.showOutput("Order placed: " + clientID, text.toString());
   }
 
-  // Prints an order's items; returns product ID -> quantity filled
-  private Map<String, Integer> printOrderItems(Order order) {
+  // Appends an order's items to text; returns product ID -> quantity filled
+  private Map<String, Integer> appendOrderItems(StringBuilder text, Order order) {
     Map<String, Integer> filled = new HashMap<String, Integer>();
     Iterator<OrderItem> items = order.getItems();
     while (items.hasNext()) {
       OrderItem item = items.next();
       String productID = item.getProduct().getId();
-      System.out.println(String.format("  %s  qty %d  @ $%.2f  = $%.2f",
-          productID, item.getQuantity(), item.getPrice(), item.getCost()));
+      text.append(String.format("  %s  qty %d  @ $%.2f  = $%.2f",
+          productID, item.getQuantity(), item.getPrice(), item.getCost())).append("\n");
       Integer before = filled.get(productID);
       filled.put(productID, (before == null ? 0 : before) + item.getQuantity());
     }
@@ -255,33 +219,35 @@ public class ClientMenuState extends WarehouseState {
   }
 
   /**
-   * Logs out; WarehouseContext decides the next state.
+   * Logs out; WarehouseContext decides the next state and shows it.
    */
   public void logout() {
     context.logout();
   }
 
   /**
-   * Runs the client menu until logout or end of input.
+   * Builds the client menu screen on the shared frame and returns.
    */
   public void run() {
     context = WarehouseContext.instance();
     warehouse = context.getWarehouse();
-    help();
-    int command;
-    while (true) {
-      command = getCommand();
-      if (command == -1) return;            // end of input: Context already stopped; do NOT log out
-      switch (command) {
-        case LOGOUT:            logout(); return;   // back to Context's dispatch loop
-        case SHOW_DETAILS:      showClientDetails(); break;
-        case SHOW_PRODUCTS:     showProducts(); break;
-        case SHOW_TRANSACTIONS: showTransactions(); break;
-        case ADD_TO_WISHLIST:   addToWishlist(); break;
-        case DISPLAY_WISHLIST:  displayWishlist(); break;
-        case PLACE_ORDER:       placeOrder(); break;
-        case HELP:              help(); break;
-      }
-    }
+    JFrame frame = context.getFrame();
+    frame.getContentPane().removeAll();
+    frame.getContentPane().setLayout(new BorderLayout());
+    frame.getContentPane().add(new JLabel("Client menu - " + context.getClientID()), BorderLayout.NORTH);
+    JPanel buttons = new JPanel(new GridLayout(0, 1, 5, 5));
+    buttons.add(new ClientDetailsButton());
+    buttons.add(new ClientProductsButton());
+    buttons.add(new ClientTransactionsButton());
+    buttons.add(new ClientAddWishlistButton());
+    buttons.add(new ClientWishlistButton());
+    buttons.add(new ClientOrderButton());
+    buttons.add(new ClientLogoutButton());
+    frame.getContentPane().add(buttons, BorderLayout.CENTER);
+    frame.setTitle("Warehouse - Client");
+    frame.revalidate();
+    frame.repaint();
+    frame.setVisible(true);
+    frame.toFront();
   }
 }
