@@ -1,6 +1,11 @@
-import java.io.BufferedReader;
-import java.io.IOException;
-import java.io.InputStreamReader;
+import java.awt.Font;
+import java.awt.event.WindowAdapter;
+import java.awt.event.WindowEvent;
+import javax.swing.JFrame;
+import javax.swing.JOptionPane;
+import javax.swing.JScrollPane;
+import javax.swing.JTextArea;
+import javax.swing.SwingUtilities;
 
 public class WarehouseContext {
     public static final int NONE = -1;
@@ -19,7 +24,7 @@ public class WarehouseContext {
 
     private static WarehouseContext context;
     private final Warehouse warehouse;
-    private final BufferedReader reader;
+    private final JFrame frame;
     private final WarehouseState[] states;
     private final int[][] nextState;
     private int currentState = LOGIN;
@@ -29,7 +34,16 @@ public class WarehouseContext {
 
     private WarehouseContext() {
         warehouse = Warehouse.instance();
-        reader = new BufferedReader(new InputStreamReader(System.in));
+        frame = new JFrame("Warehouse - Login");
+        frame.setSize(560, 460);
+        frame.setMinimumSize(new java.awt.Dimension(440, 320));
+        frame.setLocationRelativeTo(null);
+        frame.setDefaultCloseOperation(JFrame.DO_NOTHING_ON_CLOSE);
+        frame.addWindowListener(new WindowAdapter() {
+            public void windowClosing(WindowEvent event) {
+                terminate();
+            }
+        });
         states = new WarehouseState[] {
             LoginState.instance(), ClientMenuState.instance(),
             ClerkMenuState.instance(), ManagerMenuState.instance()
@@ -54,6 +68,10 @@ public class WarehouseContext {
         return warehouse;
     }
 
+    public JFrame getFrame() {
+        return frame;
+    }
+
     public String getClientID() {
         return clientID;
     }
@@ -66,32 +84,51 @@ public class WarehouseContext {
         return running;
     }
 
-    public String getToken(String prompt) {
+    public String getInput(String prompt) {
         while (running) {
-            System.out.println(prompt);
-            try {
-                String line = reader.readLine();
-                if (line == null) {
-                    running = false;
-                    return null;
-                }
-                line = line.trim();
-                if (!line.isEmpty()) {
-                    return line;
-                }
-                System.out.println("Please enter a value");
-            } catch (IOException exception) {
-                System.out.println("Unable to read input");
-                running = false;
+            String input = JOptionPane.showInputDialog(frame, prompt,
+                    "Warehouse input", JOptionPane.QUESTION_MESSAGE);
+            if (input == null || !running) {
                 return null;
             }
+            input = input.trim();
+            if (!input.isEmpty()) {
+                return input;
+            }
+            showMessage("Please enter a value");
         }
         return null;
     }
 
+    public void showMessage(String message) {
+        if (running) {
+            JOptionPane.showMessageDialog(frame, message,
+                    "Warehouse", JOptionPane.INFORMATION_MESSAGE);
+        }
+    }
+
+    public void showOutput(String title, String text) {
+        if (!running) {
+            return;
+        }
+        JTextArea output = new JTextArea(text == null ? "" : text, 18, 60);
+        output.setEditable(false);
+        output.setFont(new Font(Font.MONOSPACED, Font.PLAIN, 12));
+        output.setCaretPosition(0);
+        JScrollPane scroll = new JScrollPane(output);
+        JOptionPane.showMessageDialog(frame, scroll, title,
+                JOptionPane.PLAIN_MESSAGE);
+    }
+
+    public boolean confirm(String question) {
+        return running && JOptionPane.showConfirmDialog(frame, question,
+                "Warehouse", JOptionPane.YES_NO_OPTION,
+                JOptionPane.QUESTION_MESSAGE) == JOptionPane.YES_OPTION;
+    }
+
     public int getNumber(String prompt) {
         String token;
-        while ((token = getToken(prompt)) != null) {
+        while ((token = getInput(prompt)) != null) {
             try {
                 int value = Integer.parseInt(token);
                 if (value > 0) {
@@ -100,14 +137,14 @@ public class WarehouseContext {
             } catch (NumberFormatException exception) {
                 // Ask again below.
             }
-            System.out.println("Enter a positive whole number");
+            showMessage("Enter a positive whole number");
         }
         return -1;
     }
 
     public double getDouble(String prompt) {
         String token;
-        while ((token = getToken(prompt)) != null) {
+        while ((token = getInput(prompt)) != null) {
             try {
                 double value = Double.parseDouble(token);
                 if (Double.isFinite(value) && value > 0) {
@@ -116,14 +153,18 @@ public class WarehouseContext {
             } catch (NumberFormatException exception) {
                 // Ask again below.
             }
-            System.out.println("Enter a positive finite amount");
+            showMessage("Enter a positive finite amount");
         }
         return Double.NaN;
     }
 
+    // Compatibility for menus that have not yet replaced the text helpers.
+    public String getToken(String prompt) {
+        return getInput(prompt);
+    }
+
     public boolean yesOrNo(String prompt) {
-        String answer = getToken(prompt + " (y/n)");
-        return answer != null && (answer.charAt(0) == 'y' || answer.charAt(0) == 'Y');
+        return confirm(prompt);
     }
 
     public boolean login(int role, String id) {
@@ -145,12 +186,10 @@ public class WarehouseContext {
         } else {
             return false;
         }
-        if (!changeState(event)) {
-            return false;
-        }
+        // The next screen must see the new session values.
         loginType = role;
         clientID = validatedID;
-        return true;
+        return changeState(event);
     }
 
     public boolean becomeClient(String id) {
@@ -161,11 +200,8 @@ public class WarehouseContext {
         if (validatedID.isEmpty() || warehouse.getClient(validatedID) == null) {
             return false;
         }
-        if (!changeState(TO_CLIENT)) {
-            return false;
-        }
         clientID = validatedID;
-        return true;
+        return changeState(TO_CLIENT);
     }
 
     public boolean becomeClerk() {
@@ -173,6 +209,9 @@ public class WarehouseContext {
     }
 
     public void logout() {
+        if (!running) {
+            return;
+        }
         int event;
         if (currentState == CLIENT) {
             event = loginType == CLIENT ? TO_LOGIN : TO_CLERK;
@@ -183,19 +222,16 @@ public class WarehouseContext {
         } else {
             return;
         }
-        if (changeState(event)) {
-            clientID = null;
-            if (currentState == LOGIN) {
-                loginType = NONE;
-            }
+        clientID = null;
+        if (event == TO_LOGIN) {
+            loginType = NONE;
         }
+        changeState(event);
     }
 
     public void exit() {
-        if (currentState == LOGIN && changeState(EXIT)) {
-            loginType = NONE;
-            clientID = null;
-            System.out.println("Goodbye");
+        if (currentState == LOGIN) {
+            changeState(EXIT);
         }
     }
 
@@ -208,21 +244,29 @@ public class WarehouseContext {
             return false;
         }
         if (next == STOP) {
-            running = false;
+            terminate();
         } else {
             currentState = next;
+            states[currentState].run();
         }
         return true;
     }
 
+    private void terminate() {
+        running = false;
+        clientID = null;
+        loginType = NONE;
+        frame.dispose();
+    }
+
     public void process() {
-        // Menus return here after changing state instead of nesting run calls.
-        while (running) {
+        if (running) {
             states[currentState].run();
         }
     }
 
     public static void main(String[] args) {
-        WarehouseContext.instance().process();
+        SwingUtilities.invokeLater(() -> WarehouseContext.instance().process());
     }
 }
+

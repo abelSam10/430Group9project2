@@ -5,3 +5,4 @@ public abstract class WarehouseState {
 
     public abstract void run();
 }
+
