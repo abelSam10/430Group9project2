@@ -52,12 +52,11 @@ public class ClerkMenuState extends WarehouseState {
             warehouse.addClient(name, address, phone);
 
         if (client == null) {
-            System.out.println("Unable to add client");
+            context.showMessage("Unable to add client");
             return;
         }
 
-        System.out.println("Client successfully created");
-        System.out.println("Client ID: " + client.getId());
+        context.showMessage("Client successfully created\nClient ID: " + client.getId());
     }
 
     public void showProducts() {
@@ -150,15 +149,12 @@ public class ClerkMenuState extends WarehouseState {
             warehouse.receivePayment(clientID, payment);
 
         if (client == null) {
-            System.out.println(
-                "Unable to record payment");
+            context.showMessage("Unable to record payment");
             return;
         }
 
-        System.out.println("Payment recorded");
-        System.out.printf(
-            "Current balance: $%.2f%n",
-            client.getBalance());
+        context.showMessage(String.format("Payment recorded\nCurrent balance: $%.2f",
+            client.getBalance()));
     }
 
     public void becomeClient() {
@@ -171,7 +167,7 @@ public class ClerkMenuState extends WarehouseState {
         }
 
         if (!context.becomeClient(clientID)) {
-            System.out.println("Invalid client ID");
+            context.showMessage("Invalid client ID");
         }
     }
 

@@ -48,7 +48,7 @@ public class ManagerMenuState extends WarehouseState {
                     return -1;
                 }
                 double num = Double.parseDouble(item);
-                if (num > 0) {
+                if (Double.isFinite(num) && num > 0) {
                     return num;
                 }
                 context.showMessage("Please input a number greater than 0");
@@ -62,7 +62,13 @@ public class ManagerMenuState extends WarehouseState {
         Product result;
         do {
             String name = context.getInput("Enter name of product");
+            if (name == null) {
+                return;
+            }
             int quantity = getNumber("Enter quantity");
+            if (quantity == -1) {
+                return;
+            }
             double salePrice = getDouble("Enter sale price");
             if (name == null || quantity == -1 || salePrice == -1) {
                 return;
@@ -105,6 +111,9 @@ public class ManagerMenuState extends WarehouseState {
         ShipmentResult result;
         do {
             String productID = context.getInput("Enter product id");
+            if (productID == null) {
+                return;
+            }
             int quantity = getNumber("Enter quantity received");
             if (productID == null || quantity == -1) {
                 return;
