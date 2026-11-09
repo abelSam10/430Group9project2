@@ -1,19 +1,14 @@
 import java.util.*;
 import java.io.*;
-
+import java.awt.*;
+import javax.swing.*;
 
 public class ManagerMenuState extends WarehouseState {
     private static ManagerMenuState instance;
     private static Warehouse warehouse;
-    private static final int LOGOUT = 0;
-    private static final int ADD_PRODUCTS = 1;
-    private static final int DISPLAY_WAITLIST = 2;
-    private static final int RECEIVE_SHIPMENT = 3;
-    private static final int BECOME_CLERK = 4;
-    private static final int HELP = 5;
     private ManagerMenuState() {
-            super();
-            warehouse = Warehouse.instance();
+        super();
+        warehouse = Warehouse.instance();
     }
 
     public static ManagerMenuState instance() {
@@ -22,17 +17,15 @@ public class ManagerMenuState extends WarehouseState {
         }
         return instance;
     }
+
     private boolean yesOrNo(String prompt) {
-        String more = context.getToken(prompt + " (Y|y)[es] or anything else for no");
-        if (more == null || (more.charAt(0) != 'y' && more.charAt(0) != 'Y')) {
-            return false;
-        }
-        return true;
+        return context.confirm(prompt);
     }
+
     public int getNumber(String prompt) {
         do {
             try {
-                String item = context.getToken(prompt);
+                String item = context.getInput(prompt);
                 if (item == null) {
                     return -1;
                 }
@@ -40,16 +33,17 @@ public class ManagerMenuState extends WarehouseState {
                 if (num > 0) {
                     return num;
                 }
-                System.out.println("Please input a number greater than 0");
+                context.showMessage("Please input a number greater than 0");
             } catch (NumberFormatException nfe) {
-                System.out.println("Please input a number ");
+                context.showMessage("Please input a number");
             }
         } while (true);
     }
+    
     public double getDouble(String prompt) {
         do {
             try {
-                String item = context.getToken(prompt);
+                String item = context.getInput(prompt);
                 if (item == null) {
                     return -1;
                 }
@@ -57,43 +51,17 @@ public class ManagerMenuState extends WarehouseState {
                 if (num > 0) {
                     return num;
                 }
-                System.out.println("Please input a number greater than 0");
+                context.showMessage("Please input a number greater than 0");
             } catch (NumberFormatException nfe) {
-                System.out.println("Please input a number ");
+                context.showMessage("Please input a number");
             }
         } while (true);
-    }
-    public int getCommand() {
-        do {
-            try {
-                String item = context.getToken("Enter command:" + HELP + " for help");
-                if (item == null) {
-                    return -1;
-                }
-                int value = Integer.parseInt(item);
-                if (value >= LOGOUT && value <= HELP) {
-                    return value;
-                }
-            } catch (NumberFormatException nfe) {
-                System.out.println("Enter a number");
-            }
-        } while (true);
-    }
-
-    public void help() {
-        System.out.println("Enter a number between 0 and 5:");
-        System.out.println(LOGOUT + " to Logout\n");
-        System.out.println(ADD_PRODUCTS + " to  add products");
-        System.out.println(DISPLAY_WAITLIST + " to  display a product's waitlist");
-        System.out.println(RECEIVE_SHIPMENT + " to  receive a shipment");
-        System.out.println(BECOME_CLERK + " to  switch to the clerk menu");
-        System.out.println(HELP + " for help");
     }
 
     public void addProducts() {
         Product result;
         do {
-            String name = context.getToken("Enter name of product");
+            String name = context.getInput("Enter name of product");
             int quantity = getNumber("Enter quantity");
             double salePrice = getDouble("Enter sale price");
             if (name == null || quantity == -1 || salePrice == -1) {
@@ -101,9 +69,9 @@ public class ManagerMenuState extends WarehouseState {
             }
             result = warehouse.addProduct(name, quantity, salePrice);
             if (result != null) {
-                System.out.println(result);
+                context.showMessage(result.toString());
             } else {
-                System.out.println("Product could not be added");
+                context.showMessage("Product could not be added");
             }
             if (!yesOrNo("Add more products?")) {
                 break;
@@ -112,49 +80,51 @@ public class ManagerMenuState extends WarehouseState {
     }
 
     public void displayWaitlist() {
-        String productID = context.getToken("Enter product id");
+        String productID = context.getInput("Enter product id");
         if (productID == null) {
             return;
         }
         Iterator waitlist = warehouse.getWaitlist(productID);
         if (waitlist == null) {
-            System.out.println("No such product");
+            context.showMessage("No such product");
             return;
         }
         if (!waitlist.hasNext()) {
-            System.out.println("No waitlist for this product");
+            context.showMessage("No waitlist for this product");
             return;
         }
-        System.out.println("Waitlist for product " + productID + ":");
+        StringBuilder text = new StringBuilder();
         while (waitlist.hasNext()) {
-            System.out.println(waitlist.next());
+            text.append(waitlist.next()).append("\n");
         }
+        context.showOutput("Waitlist for product " + productID + ":", text.toString());
     }
 
     // the backend fills the waitlist first and puts the rest into stock
     public void receiveShipment() {
         ShipmentResult result;
         do {
-            String productID = context.getToken("Enter product id");
+            String productID = context.getInput("Enter product id");
             int quantity = getNumber("Enter quantity received");
             if (productID == null || quantity == -1) {
                 return;
             }
             result = warehouse.receiveShipment(productID, quantity);
             if (result == null) {
-                System.out.println("Invalid product or quantity");
+                context.showMessage("Invalid product or quantity");
             } else {
-                System.out.println("Shipment processed");
+                StringBuilder text = new StringBuilder(); //better way of displaying this
                 Iterator orders = result.getOrders();
                 while (orders.hasNext()) {
                     Order order = (Order) orders.next();
-                    System.out.println(order);
+                    text.append(order).append("\n");
                     Iterator items = order.getItems();
                     while (items.hasNext()) {
-                        System.out.println("  " + items.next());
+                        text.append("  ").append(items.next()).append("\n");
                     }
                 }
-                System.out.println("Quantity added to stock: " + result.getQuantityAddedToStock());
+                text.append("Quantity added to stock: " + result.getQuantityAddedToStock());
+                context.showOutput("Shipment processed", text.toString());
             }
             if (!yesOrNo("Receive more shipments?")) {
                 break;
@@ -167,47 +137,28 @@ public class ManagerMenuState extends WarehouseState {
         if (context.becomeClerk()) {
             return true;
         }
-        System.out.println("Could not switch to the clerk menu");
+        context.showMessage("Could not switch to the clerk menu");
         return false;
     }
 
-    public void logout()
-    {
+    public void logout() {
         context.logout(); // Context picks the next state --> login menu
     }
-
-    public void process() {
-        int command;
-        help();
-        while ((command = getCommand()) != LOGOUT) {
-            if (command == -1) {
-                return; // end of input
-            }
-            switch (command) {
-                case ADD_PRODUCTS:
-                    addProducts();
-                    break;
-                case DISPLAY_WAITLIST:
-                    displayWaitlist();
-                    break;
-                case RECEIVE_SHIPMENT:
-                    receiveShipment();
-                    break;
-                case BECOME_CLERK:
-                    if (becomeClerk()) {
-                        return; // back to Context, which runs the clerk menu
-                    }
-                    break;
-                case HELP:
-                    help();
-                    break;
-            }
-        }
-        logout();
-    }
-
+    // build the manager screen
     public void run() {
         context = WarehouseContext.instance();
-        process();
+        JFrame frame = context.getFrame();
+        frame.getContentPane().removeAll();
+        frame.getContentPane().setLayout(new GridLayout(0, 1, 5, 5));
+        frame.getContentPane().add(new ManagerAddProductsButton());
+        frame.getContentPane().add(new ManagerWaitlistButton());
+        frame.getContentPane().add(new ManagerShipmentButton());
+        frame.getContentPane().add(new ManagerBecomeClerkButton());
+        frame.getContentPane().add(new ManagerLogoutButton());
+        frame.setTitle("Warehouse - Manager");
+        frame.revalidate();
+        frame.repaint();
+        frame.setVisible(true);
+        frame.toFront();
     }
 }
