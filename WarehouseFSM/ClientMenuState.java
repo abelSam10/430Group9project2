@@ -8,7 +8,8 @@ import javax.swing.*;
  * samplecode/Library: run() builds the screen and returns, and each button is
  * its own class that calls one method here. Every operation works only on the
  * client returned by context.getClientID(), and the choice of the next state
- * belongs to WarehouseContext.
+ * belongs to WarehouseContext. The wishlist commands live in WishlistState,
+ * which is reached through "Perform wishlist operations".
  */
 public class ClientMenuState extends WarehouseState {
   private static ClientMenuState state;
@@ -27,25 +28,6 @@ public class ClientMenuState extends WarehouseState {
       state = new ClientMenuState();
     }
     return state;
-  }
-
-  // Reads a positive integer (a quantity); returns -1 on Cancel
-  private int getQuantity(String prompt) {
-    do {
-      String token = context.getInput(prompt);
-      if (token == null) {
-        return -1;
-      }
-      try {
-        int value = Integer.parseInt(token);
-        if (value > 0) {
-          return value;
-        }
-      } catch (NumberFormatException nfe) {
-        // Ask again below
-      }
-      context.showMessage("Enter a whole number greater than 0");
-    } while (true);
   }
 
   /**
@@ -112,99 +94,9 @@ public class ClientMenuState extends WarehouseState {
     context.showOutput("Transactions: " + clientID, text.toString());
   }
 
-  /**
-   * Adds products to the active client's wishlist until the user says stop.
-   */
-  public void addToWishlist() {
-    String clientID = context.getClientID();
-    do {
-      String productID = context.getInput("Enter product ID");
-      if (productID == null) {
-        return;
-      }
-      int quantity = getQuantity("Enter quantity");
-      if (quantity == -1) {
-        return;
-      }
-      if (warehouse.addToWishlist(clientID, productID, quantity)) {
-        context.showMessage(quantity + " of " + productID + " added to wishlist");
-      } else {
-        context.showMessage(productID + " could not be added (unknown product)");
-      }
-    } while (context.confirm("Add more items?"));
-  }
-
-  /**
-   * Shows each item in the active client's wishlist.
-   */
-  public void displayWishlist() {
-    String clientID = context.getClientID();
-    Iterator<WishlistItem> wishlist = warehouse.getWishlist(clientID);
-    if (wishlist == null) {
-      context.showMessage("No such client");
-      return;
-    }
-    if (!wishlist.hasNext()) {
-      context.showOutput("Wishlist: " + clientID, "Wishlist is empty");
-      return;
-    }
-    StringBuilder text = new StringBuilder();
-    while (wishlist.hasNext()) {
-      WishlistItem item = wishlist.next();
-      Product product = item.getProduct();
-      text.append(product.getId()).append("  ").append(product.getName())
-          .append("  qty ").append(item.getQuantity()).append("\n");
-    }
-    context.showOutput("Wishlist: " + clientID, text.toString());
-  }
-
-  /**
-   * Orders the whole wishlist after confirmation and shows the result.
-   */
-  public void placeOrder() {
-    String clientID = context.getClientID();
-    Iterator<WishlistItem> wishlist = warehouse.getWishlist(clientID);
-    if (wishlist == null) {
-      context.showMessage("No such client");
-      return;
-    }
-    // Snapshot of requested quantities, used only to report what was waitlisted
-    Map<String, Integer> requested = new LinkedHashMap<String, Integer>();
-    while (wishlist.hasNext()) {
-      WishlistItem item = wishlist.next();
-      requested.put(item.getProduct().getId(), item.getQuantity());
-    }
-    if (requested.isEmpty()) {
-      context.showMessage("Order could not be processed (wishlist is empty)");
-      return;
-    }
-    displayWishlist();
-    if (!context.confirm("Place order for all items?")) {
-      return;
-    }
-    Order order = warehouse.processOrder(clientID);
-    if (order == null) {
-      context.showMessage("Order could not be processed (wishlist is empty)");
-      return;
-    }
-    StringBuilder text = new StringBuilder("Order summary:\n");
-    Map<String, Integer> filled = appendOrderItems(text, order);
-    text.append(String.format("Order total: $%.2f", order.getTotal())).append("\n");
-    for (Map.Entry<String, Integer> entry : requested.entrySet()) {
-      Integer got = filled.get(entry.getKey());
-      int waitlisted = entry.getValue() - (got == null ? 0 : got);
-      if (waitlisted > 0) {
-        text.append(waitlisted).append(" unit(s) of ").append(entry.getKey())
-            .append(" waitlisted (insufficient stock)\n");
-      }
-    }
-    text.append(String.format("Updated balance: $%.2f",
-        warehouse.getClient(clientID).getBalance()));
-    context.showOutput("Order placed: " + clientID, text.toString());
-  }
-
-  // Appends an order's items to text; returns product ID -> quantity filled
-  private Map<String, Integer> appendOrderItems(StringBuilder text, Order order) {
+  // Appends an order's items to text; returns product ID -> quantity filled.
+  // Also used by WishlistState for the order summary.
+  static Map<String, Integer> appendOrderItems(StringBuilder text, Order order) {
     Map<String, Integer> filled = new HashMap<String, Integer>();
     Iterator<OrderItem> items = order.getItems();
     while (items.hasNext()) {
@@ -216,6 +108,13 @@ public class ClientMenuState extends WarehouseState {
       filled.put(productID, (before == null ? 0 : before) + item.getQuantity());
     }
     return filled;
+  }
+
+  /**
+   * Moves to the wishlist state; WarehouseContext makes the transition.
+   */
+  public void wishlistOperations() {
+    context.openWishlist();
   }
 
   /**
@@ -239,9 +138,7 @@ public class ClientMenuState extends WarehouseState {
     buttons.add(new ClientDetailsButton());
     buttons.add(new ClientProductsButton());
     buttons.add(new ClientTransactionsButton());
-    buttons.add(new ClientAddWishlistButton());
-    buttons.add(new ClientWishlistButton());
-    buttons.add(new ClientOrderButton());
+    buttons.add(new ClientWishlistOpsButton());
     buttons.add(new ClientLogoutButton());
     frame.getContentPane().add(buttons, BorderLayout.CENTER);
     frame.setTitle("Warehouse - Client");

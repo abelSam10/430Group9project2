@@ -13,12 +13,14 @@ public class WarehouseContext {
     public static final int CLIENT = 1;
     public static final int CLERK = 2;
     public static final int MANAGER = 3;
+    public static final int WISHLIST = 4;
 
     private static final int TO_LOGIN = 0;
     private static final int TO_CLIENT = 1;
     private static final int TO_CLERK = 2;
     private static final int TO_MANAGER = 3;
     private static final int EXIT = 4;
+    private static final int TO_WISHLIST = 5;
     private static final int INVALID = -2;
     private static final int STOP = -1;
 
@@ -46,14 +48,17 @@ public class WarehouseContext {
         });
         states = new WarehouseState[] {
             LoginState.instance(), ClientMenuState.instance(),
-            ClerkMenuState.instance(), ManagerMenuState.instance()
+            ClerkMenuState.instance(), ManagerMenuState.instance(),
+            WishlistState.instance()
         };
-        // Columns: TO_LOGIN, TO_CLIENT, TO_CLERK, TO_MANAGER, EXIT.
+        // Columns: TO_LOGIN, TO_CLIENT, TO_CLERK, TO_MANAGER, EXIT, TO_WISHLIST.
+        // Rows: LOGIN, CLIENT, CLERK, MANAGER, WISHLIST.
         nextState = new int[][] {
-            {INVALID, CLIENT, CLERK, MANAGER, STOP},
-            {LOGIN, INVALID, CLERK, INVALID, INVALID},
-            {LOGIN, CLIENT, INVALID, MANAGER, INVALID},
-            {LOGIN, INVALID, CLERK, INVALID, INVALID}
+            {INVALID, CLIENT, CLERK, MANAGER, STOP, INVALID},
+            {LOGIN, INVALID, CLERK, INVALID, INVALID, WISHLIST},
+            {LOGIN, CLIENT, INVALID, MANAGER, INVALID, INVALID},
+            {LOGIN, INVALID, CLERK, INVALID, INVALID, INVALID},
+            {INVALID, CLIENT, INVALID, INVALID, INVALID, INVALID}
         };
     }
 
@@ -206,6 +211,15 @@ public class WarehouseContext {
 
     public boolean becomeClerk() {
         return currentState == MANAGER && changeState(TO_CLERK);
+    }
+
+    // The wishlist state works on the same client, so clientID and loginType stay as they are.
+    public boolean openWishlist() {
+        return currentState == CLIENT && changeState(TO_WISHLIST);
+    }
+
+    public boolean closeWishlist() {
+        return currentState == WISHLIST && changeState(TO_CLIENT);
     }
 
     public void logout() {
